@@ -1,0 +1,249 @@
+package com.example.demo.service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.demo.dto.LoanRequest;
+import com.example.demo.dto.LoanResponse;
+import com.example.demo.dto.LoanStatsResponse;
+import com.example.demo.dto.TopBorrowedBookResponse;
+import com.example.demo.model.Book;
+import com.example.demo.model.Loan;
+import com.example.demo.model.LoanStatus;
+import com.example.demo.model.User;
+import com.example.demo.repository.BookRepository;
+import com.example.demo.repository.LoanRepository;
+import com.example.demo.repository.UserRepository;
+
+@Service
+public class LoanService {
+    private static final int DEFAULT_LOAN_DAYS = 14;
+    private static final BigDecimal FINE_PER_DAY = BigDecimal.valueOf(5000);
+    private static final List<LoanStatus> ACTIVE_LOAN_STATUSES = List.of(
+            LoanStatus.BORROWED,
+            LoanStatus.OVERDUE);
+
+    private final LoanRepository loanRepository;
+    private final BookRepository bookRepository;
+    private final UserRepository userRepository;
+
+    public LoanService(
+            LoanRepository loanRepository,
+            BookRepository bookRepository,
+            UserRepository userRepository) {
+        this.loanRepository = loanRepository;
+        this.bookRepository = bookRepository;
+        this.userRepository = userRepository;
+    }
+
+    @Transactional
+    public List<LoanResponse> getAllLoans() {
+        updateOverdueLoans();
+        return loanRepository.findAll()
+                .stream()
+                .map(LoanResponse::fromLoan)
+                .toList();
+    }
+
+    @Transactional
+    public LoanResponse getLoanById(Long id) {
+        Loan loan = findLoanById(id);
+        updateOverdueStatusIfNeeded(loan);
+        return LoanResponse.fromLoan(loan);
+    }
+
+    @Transactional
+    public List<LoanResponse> getLoansByUser(Long userId) {
+        findUserById(userId);
+        updateOverdueLoans();
+        return loanRepository.findByUser_Id(userId)
+                .stream()
+                .map(LoanResponse::fromLoan)
+                .toList();
+    }
+
+    @Transactional
+    public List<LoanResponse> getLoansByUsername(String username) {
+        User user = findUserByUsername(username);
+        return getLoansByUser(user.getId());
+    }
+
+    @Transactional
+    public List<LoanResponse> getOverdueLoans() {
+        updateOverdueLoans();
+        return loanRepository.findByStatus(LoanStatus.OVERDUE)
+                .stream()
+                .map(LoanResponse::fromLoan)
+                .toList();
+    }
+
+    @Transactional
+    public LoanStatsResponse getStats() {
+        updateOverdueLoans();
+
+        long borrowedLoans = loanRepository.countByStatus(LoanStatus.BORROWED);
+        long overdueLoans = loanRepository.countByStatus(LoanStatus.OVERDUE);
+        long returnedLoans = loanRepository.countByStatus(LoanStatus.RETURNED);
+        long activeLoans = borrowedLoans + overdueLoans;
+
+        List<TopBorrowedBookResponse> topBorrowedBooks = loanRepository.findTopBorrowedBooks(PageRequest.of(0, 5))
+                .stream()
+                .map(row -> new TopBorrowedBookResponse(
+                        (Long) row[0],
+                        (String) row[1],
+                        (Long) row[2]))
+                .toList();
+
+        return new LoanStatsResponse(
+                loanRepository.count(),
+                activeLoans,
+                borrowedLoans,
+                overdueLoans,
+                returnedLoans,
+                loanRepository.sumFineAmount(),
+                topBorrowedBooks);
+    }
+
+    @Transactional
+    public LoanResponse borrow(LoanRequest request) {
+        Book book = findBookById(request.getBookId());
+        User user = findUserById(request.getUserId());
+
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException("User is disabled");
+        }
+        if (book.getAvailable() <= 0) {
+            throw new IllegalArgumentException("Book is not available");
+        }
+        if (loanRepository.existsByUser_IdAndBook_IdAndStatusIn(user.getId(), book.getId(), ACTIVE_LOAN_STATUSES)) {
+            throw new IllegalArgumentException("User already has an active loan for this book");
+        }
+
+        LocalDate borrowDate = LocalDate.now();
+        LocalDate dueDate = request.getDueDate() != null
+                ? request.getDueDate()
+                : borrowDate.plusDays(DEFAULT_LOAN_DAYS);
+
+        if (dueDate.isBefore(borrowDate)) {
+            throw new IllegalArgumentException("Due date cannot be before borrow date");
+        }
+
+        Loan loan = new Loan(book, user, borrowDate, dueDate);
+        book.setAvailable(book.getAvailable() - 1);
+
+        Loan savedLoan = loanRepository.save(loan);
+        bookRepository.save(book);
+
+        return LoanResponse.fromLoan(savedLoan);
+    }
+
+    @Transactional
+    public LoanResponse borrowForUsername(LoanRequest request, String username) {
+        User user = findUserByUsername(username);
+        LoanRequest readerRequest = new LoanRequest(request.getBookId(), user.getId(), request.getDueDate());
+        return borrow(readerRequest);
+    }
+
+    @Transactional
+    public LoanResponse returnBook(Long loanId) {
+        Loan loan = findLoanById(loanId);
+
+        if (loan.getStatus() == LoanStatus.RETURNED) {
+            throw new IllegalArgumentException("Loan has already been returned");
+        }
+
+        LocalDate returnDate = LocalDate.now();
+        loan.setReturnDate(returnDate);
+        loan.setStatus(LoanStatus.RETURNED);
+        loan.setFineAmount(calculateFine(returnDate, loan.getDueDate()));
+
+        Book book = loan.getBook();
+        book.setAvailable(book.getAvailable() + 1);
+
+        Loan savedLoan = loanRepository.save(loan);
+        bookRepository.save(book);
+
+        return LoanResponse.fromLoan(savedLoan);
+    }
+
+    @Transactional
+    public LoanResponse returnBookForUsername(Long loanId, String username) {
+        Loan loan = findLoanById(loanId);
+        if (!loan.getUser().getUsername().equals(username)) {
+            throw new IllegalArgumentException("You can only return your own loans");
+        }
+        return returnBook(loanId);
+    }
+
+    @Transactional
+    public LoanResponse getLoanByIdForUsername(Long loanId, String username) {
+        Loan loan = findLoanById(loanId);
+        if (!loan.getUser().getUsername().equals(username)) {
+            throw new IllegalArgumentException("You can only view your own loans");
+        }
+        updateOverdueStatusIfNeeded(loan);
+        return LoanResponse.fromLoan(loan);
+    }
+
+    private Book findBookById(Long bookId) {
+        if (bookId == null) {
+            throw new IllegalArgumentException("Book id is required");
+        }
+        return bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book not found"));
+    }
+
+    private User findUserById(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    private User findUserByUsername(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    private Loan findLoanById(Long loanId) {
+        if (loanId == null) {
+            throw new IllegalArgumentException("Loan id is required");
+        }
+        return loanRepository.findById(loanId)
+                .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
+    }
+
+    private BigDecimal calculateFine(LocalDate returnDate, LocalDate dueDate) {
+        if (!returnDate.isAfter(dueDate)) {
+            return BigDecimal.ZERO;
+        }
+        long lateDays = ChronoUnit.DAYS.between(dueDate, returnDate);
+        return FINE_PER_DAY.multiply(BigDecimal.valueOf(lateDays));
+    }
+
+    private void updateOverdueLoans() {
+        List<Loan> overdueLoans = loanRepository.findByDueDateBeforeAndStatusIn(
+                LocalDate.now(),
+                List.of(LoanStatus.BORROWED));
+
+        overdueLoans.forEach(loan -> loan.setStatus(LoanStatus.OVERDUE));
+        loanRepository.saveAll(overdueLoans);
+    }
+
+    private void updateOverdueStatusIfNeeded(Loan loan) {
+        if (loan.getStatus() == LoanStatus.BORROWED && loan.getDueDate().isBefore(LocalDate.now())) {
+            loan.setStatus(LoanStatus.OVERDUE);
+            loanRepository.save(loan);
+        }
+    }
+}
