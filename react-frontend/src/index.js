@@ -1,17 +1,34 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import App from "./App";
+import { initializeKeycloak } from "./auth/keycloak";
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+const root = ReactDOM.createRoot(document.getElementById("root"));
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+async function bootstrap() {
+    // Xóa dữ liệu đăng nhập của cơ chế cũ.
+    localStorage.removeItem("libraryAuth");
+
+    try {
+        await initializeKeycloak();
+
+        root.render(
+            <React.StrictMode>
+                <App />
+            </React.StrictMode>,
+        );
+    } catch {
+        root.render(
+            <main>
+                <h1>Không kết nối được hệ thống đăng nhập</h1>
+                <p>Kiểm tra Keycloak rồi tải lại trang.</p>
+                <button onClick={() => window.location.reload()}>
+                    Thử lại
+                </button>
+            </main>,
+        );
+    }
+}
+
+bootstrap();
