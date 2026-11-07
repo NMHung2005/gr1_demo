@@ -1,10 +1,15 @@
 package com.example.demo.service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.demo.dto.BookResponse;
 import com.example.demo.model.Book;
 import com.example.demo.model.LoanStatus;
 import com.example.demo.repository.BookRepository;
@@ -24,10 +29,22 @@ public class BookService {
         this.loanRepository = loanRepository;
     }
 
-    public List<Book> getAllBooks() {
-        return bookRepository.findAll();
+    /*
+     * public List<Book> getAllBooks() {
+     * return bookRepository.findAll();
+     * }
+     */
+
+    @Cacheable(cacheNames = "books", key = "'all'")
+    public List<BookResponse> getAllBooks() {
+        return bookRepository.findAll()
+                .stream()
+                .map(BookResponse::fromBook)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
+    @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public Book handleCreateBook(Book book) {
         validateQuantity(book.getQuantity());
         book.setAvailable(book.getQuantity());
@@ -35,6 +52,7 @@ public class BookService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public Book handleUpdateBook(long id, Book updated) {
         Book existing = bookRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
@@ -56,6 +74,7 @@ public class BookService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public void handleDeleteBook(long id) {
         bookRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));

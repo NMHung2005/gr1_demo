@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
@@ -106,6 +107,7 @@ public class LoanService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public LoanResponse borrow(LoanRequest request) {
         Book book = findBookByIdForUpdate(request.getBookId());
         User user = findUserById(request.getUserId());
@@ -143,12 +145,14 @@ public class LoanService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public LoanResponse borrowForUser(LoanRequest request, Long userId) {
         LoanRequest readerRequest = new LoanRequest(request.getBookId(), userId, request.getDueDate());
         return borrow(readerRequest);
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public LoanResponse returnBook(Long loanId) {
         Loan loan = loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
@@ -172,6 +176,7 @@ public class LoanService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "books", key = "'all'")
     public LoanResponse returnBookForUser(Long loanId, Long userId) {
         Loan loan = loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
@@ -224,7 +229,8 @@ public class LoanService {
     }
 
     private void updateOverdueLoans() {
-        // A conditional database update cannot overwrite a concurrently committed return.
+        // A conditional database update cannot overwrite a concurrently committed
+        // return.
         loanRepository.markOverdue(LocalDate.now());
     }
 

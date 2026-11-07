@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import com.example.demo.dto.BookResponse;
 import com.example.demo.model.Book;
 import com.example.demo.service.BookService;
 
@@ -23,7 +24,7 @@ public class BookController {
     }
 
     @GetMapping("/api/books")
-    public List<Book> getBooks() {
+    public List<BookResponse> getBooks() {
         return bookService.getAllBooks();
     }
 
