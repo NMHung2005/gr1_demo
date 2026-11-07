@@ -304,3 +304,55 @@ tbody tr:hover {
     flex-direction: column;
   }
 }
+
+/* Keep authentication and navigation consistent with the existing library UI. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fff;
+}
+
+.site-header .navbar { position: static; }
+.brand { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  background: #0f766e;
+  color: #fff;
+  border-radius: 6px;
+}
+.user-identity { display: grid; gap: 2px; }
+.user-identity span { color: #64748b; font-size: 12px; }
+.navbar-error { margin: 0; padding: 10px 24px; background: #fff1f2; }
+.auth-form { width: min(420px, 100%); box-sizing: border-box; padding: 24px; }
+.auth-form .muted { margin: 16px 0; line-height: 1.6; }
+.auth-submit { width: 100%; margin-top: 12px; }
+.auth-footer { margin-top: 24px; font-size: 14px; }
+.auth-footer a { color: #0f766e; font-weight: 600; }
+.section-label {
+  display: block;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.button-link {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #0f766e;
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+}
+.button-link:hover { background: #115e59; }
+button:focus-visible, a:focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+.status-page { max-width: 650px; padding: 24px; margin: 24px auto; }
+.status-page p { color: #526477; line-height: 1.7; }
+@media (max-width: 760px) {
+  .nav-user { width: 100%; justify-content: space-between; }
+}

@@ -10,7 +10,7 @@ const emptyForm = {
   enabled: true
 };
 
-function ReaderPage() {
+function ReaderPage({ readOnly = false }) {
   const [readers, setReaders] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -99,11 +99,11 @@ function ReaderPage() {
       <div className="page-header">
         <div>
           <h1>Readers</h1>
-          <p className="muted">Create and update reader accounts.</p>
+          <p className="muted">{readOnly ? 'Danh sách hồ sơ độc giả của thư viện.' : 'Create and update reader accounts.'}</p>
         </div>
       </div>
 
-      <form className="simple-form grid-form" onSubmit={handleSubmit}>
+      {!readOnly && <form className="simple-form grid-form" onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="fullName">Full name</label>
           <input id="fullName" name="fullName" value={form.fullName} onChange={handleChange} required />
@@ -142,7 +142,7 @@ function ReaderPage() {
             </button>
           ) : null}
         </div>
-      </form>
+      </form>}
 
       {loading ? <p>Loading...</p> : null}
       {error ? <p className="error">Error: {error}</p> : null}
@@ -156,12 +156,12 @@ function ReaderPage() {
               <th>Full name</th>
               <th>Email</th>
               <th>Status</th>
-              <th>Actions</th>
+              {!readOnly && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {readers.length === 0 ? (
-              <EmptyState colSpan="6" message="No readers" />
+              <EmptyState colSpan={readOnly ? 5 : 6} message="No readers" />
             ) : (
               readers.map((reader) => (
                 <tr key={reader.id}>
@@ -174,14 +174,14 @@ function ReaderPage() {
                       {reader.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
-                  <td>
+                  {!readOnly && <td>
                     <button className="link" type="button" onClick={() => handleEdit(reader)}>
                       Edit
                     </button>
                     <button className="link danger" type="button" onClick={() => handleDelete(reader)}>
                       Delete
                     </button>
-                  </td>
+                  </td>}
                 </tr>
               ))
             )}

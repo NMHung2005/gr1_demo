@@ -14,7 +14,7 @@ export function initializeKeycloak() {
             onLoad: "check-sso",
             pkceMethod: "S256",
             checkLoginIframe: false,
-            redirectUri: `${window.location.origin}/books`,
+            redirectUri: `${window.location.origin}${window.location.pathname}${window.location.search}`,
         });
     }
 

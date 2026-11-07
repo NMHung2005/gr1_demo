@@ -4,8 +4,9 @@ import { useAuth } from '../auth/AuthContext';
 import EmptyState from '../components/EmptyState';
 import { filterBooks } from '../utils/bookFilters';
 
-function BookPage() {
+function BookPage({ readOnly = false }) {
   const { isLibrarian, isReader } = useAuth();
+  const showActions = !readOnly && (isLibrarian || isReader);
   const [books, setBooks] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -130,7 +131,7 @@ function BookPage() {
       <div className="page-header">
         <div>
           <h1>Books</h1>
-          <p className="muted">Manage books and borrow available copies.</p>
+          <p className="muted">{readOnly ? 'Tra cứu sách theo tên, tác giả hoặc thể loại.' : 'Manage books and borrow available copies.'}</p>
         </div>
       </div>
 
@@ -145,7 +146,7 @@ function BookPage() {
         />
       </div>
 
-      {isLibrarian ? (
+      {isLibrarian && !readOnly ? (
         <form className="simple-form grid-form" onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="title">Title</label>
@@ -194,13 +195,13 @@ function BookPage() {
               <th>Year</th>
               <th>Quantity</th>
               <th>Available</th>
-              <th>Actions</th>
+              {showActions && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filteredBooks.length === 0 ? (
               <EmptyState
-                colSpan="8"
+                colSpan={showActions ? 8 : 7}
                 message={books.length === 0 ? 'No books' : 'No books match your search'}
               />
             ) : (
@@ -217,7 +218,7 @@ function BookPage() {
                       {book.available ?? 0}
                     </span>
                   </td>
-                  <td>
+                  {showActions && <td>
                     {isReader ? (
                       <button
                         className={(book.available ?? 0) > 0 ? 'link' : 'link unavailable'}
@@ -238,7 +239,7 @@ function BookPage() {
                         </button>
                       </>
                     ) : null}
-                  </td>
+                  </td>}
                 </tr>
               ))
             )}

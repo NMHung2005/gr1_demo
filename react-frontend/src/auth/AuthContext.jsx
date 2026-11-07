@@ -1,97 +1,114 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  apiClient,
-  AUTH_EXPIRED_EVENT,
-  clearStoredAuth,
-  getStoredAuth,
-  saveStoredAuth
-} from '../api/client';
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
+
+import keycloak from './keycloak';
+import { safeReturnPath } from './returnPath';
 
 const AuthContext = createContext(null);
 
-function buildAuthData(response) {
+function readUser() {
+  if (!keycloak.authenticated || !keycloak.tokenParsed) {
+    return null;
+  }
+
+  const claims = keycloak.tokenParsed;
+  const roles = claims.realm_access?.roles || [];
+
+  const role = roles.includes('LIBRARIAN')
+    ? 'LIBRARIAN'
+    : roles.includes('READER')
+      ? 'READER'
+      : null;
+
   return {
-    id: response.id,
-    username: response.username,
-    fullName: response.fullName,
-    email: response.email,
-    role: response.role,
-    enabled: response.enabled,
-    accessToken: response.accessToken,
-    refreshToken: response.refreshToken,
-    tokenType: response.tokenType
+    subject: claims.sub,
+    username: claims.preferred_username,
+    fullName: claims.name || claims.preferred_username,
+    email: claims.email,
+    roles,
+    role
   };
 }
 
 export function AuthProvider({ children }) {
-  const [auth, setAuth] = useState(() => getStoredAuth());
+  const [user, setUser] = useState(readUser);
 
   useEffect(() => {
-    const handleAuthExpired = () => setAuth(null);
-    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    const syncUser = () => setUser(readUser());
 
-    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    keycloak.onAuthSuccess = syncUser;
+    keycloak.onAuthRefreshSuccess = syncUser;
+    keycloak.onAuthLogout = syncUser;
+
+    keycloak.onAuthRefreshError = () => {
+      keycloak.clearToken();
+      syncUser();
+    };
+
+    keycloak.onTokenExpired = () => {
+      keycloak.updateToken(30).catch(() => {
+        keycloak.clearToken();
+        syncUser();
+      });
+    };
+
+    return () => {
+      keycloak.onAuthSuccess = undefined;
+      keycloak.onAuthRefreshSuccess = undefined;
+      keycloak.onAuthLogout = undefined;
+      keycloak.onAuthRefreshError = undefined;
+      keycloak.onTokenExpired = undefined;
+    };
   }, []);
 
-  const login = useCallback(async (username, password) => {
-    const response = await apiClient('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password })
+  const login = useCallback((returnTo = '/books') => {
+    return keycloak.login({
+      redirectUri: `${window.location.origin}${safeReturnPath(returnTo)}`
     });
-    const nextAuth = buildAuthData(response);
-    saveStoredAuth(nextAuth);
-    setAuth(nextAuth);
-    return nextAuth;
   }, []);
 
-  const register = useCallback(async (form) => {
-    const response = await apiClient('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(form)
+  const register = useCallback((returnTo = '/books') => {
+    return keycloak.register({
+      redirectUri: `${window.location.origin}${safeReturnPath(returnTo)}`
     });
-    const nextAuth = buildAuthData(response);
-    saveStoredAuth(nextAuth);
-    setAuth(nextAuth);
-    return nextAuth;
   }, []);
 
-  const logout = useCallback(async () => {
-    const refreshToken = auth?.refreshToken;
-    if (refreshToken) {
-      try {
-        await apiClient('/api/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refreshToken })
-        });
-      } catch (error) {
+  const logout = useCallback(() => {
+    return keycloak.logout({
+      redirectUri: `${window.location.origin}/login`
+    });
+  }, []);
 
-      }
-    }
-    clearStoredAuth();
-    setAuth(null);
-  }, [auth?.refreshToken]);
+  const value = useMemo(() => ({
+    auth: user,
+    user,
+    isLoggedIn: Boolean(user),
+    isLibrarian: Boolean(user?.roles.includes('LIBRARIAN')),
+    isReader: Boolean(user?.roles.includes('READER')),
+    login,
+    register,
+    logout
+  }), [user, login, register, logout]);
 
-  const value = useMemo(
-    () => ({
-      auth,
-      user: auth,
-      isLoggedIn: Boolean(auth?.accessToken),
-      isLibrarian: auth?.role === 'LIBRARIAN',
-      isReader: auth?.role === 'READER',
-      login,
-      register,
-      logout
-    }),
-    [auth, login, logout, register]
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) {
+  const context = useContext(AuthContext);
+
+  if (!context) {
     throw new Error('useAuth must be used inside AuthProvider');
   }
-  return value;
+
+  return context;
 }

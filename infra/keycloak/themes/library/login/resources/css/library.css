@@ -1,0 +1,57 @@
+/* Minimal library form; keep Keycloak's validation and accessibility. */
+html.login-pf,
+.login-pf body {
+  background: #f5f7fb none;
+  color: #1f2937;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.login-pf-page { padding: 48px 16px 24px; }
+#kc-header { margin-bottom: 20px; color: #1f2937; }
+#kc-header-wrapper {
+  padding: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+}
+
+.login-pf-page .card-pf {
+  max-width: 420px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .05);
+}
+
+.login-pf-page .login-pf-header { margin-bottom: 24px; }
+#kc-page-title { font-size: 24px; font-weight: 600; }
+.login-pf-page .form-group label { color: #374151; font-size: 14px; }
+.form-control { height: 40px; border-radius: 5px; border-color: #cbd5e1; }
+.form-control:focus { border-color: #0f766e; box-shadow: 0 0 0 2px #ccfbf1; }
+
+#kc-login,
+#kc-register,
+input[type="submit"].btn-primary {
+  min-height: 40px;
+  border: 0;
+  border-radius: 5px;
+  background: #0f766e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+#kc-login:hover,
+input[type="submit"].btn-primary:hover { background: #115e59; }
+a { color: #0f766e; }
+.login-pf-page .login-pf-signup { margin-top: 20px; color: #475569; font-size: 14px; }
+#kc-info-wrapper { padding: 16px; border-radius: 0 0 8px 8px; background: #f8fafc; }
+
+@media (max-width: 480px) {
+  .login-pf-page { padding-top: 24px; }
+  .login-pf-page .card-pf { padding: 20px; }
+}
