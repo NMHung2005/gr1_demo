@@ -1,56 +1,30 @@
 package com.example.demo.controller;
 
 import java.util.List;
-
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.example.demo.dto.UserRequest;
+import jakarta.validation.Valid;
+import com.example.demo.dto.BorrowingStatusRequest;
 import com.example.demo.dto.UserResponse;
 import com.example.demo.service.UserService;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
-    private final UserService userService;
+    private final UserService users;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
+    public UserController(UserService users) { this.users = users; }
 
     @GetMapping
-    public List<UserResponse> getAllUsers() {
-        return userService.getAllUsers();
-    }
+    public List<UserResponse> getAllUsers() { return users.getAllUsers(); }
 
     @GetMapping("/readers")
-    public List<UserResponse> getReaders() {
-        return userService.getReaders();
-    }
+    public List<UserResponse> getReaders() { return users.getReaders(); }
 
     @GetMapping("/{id}")
-    public UserResponse getUserById(@PathVariable Long id) {
-        return userService.getUserById(id);
-    }
+    public UserResponse getUserById(@PathVariable Long id) { return users.getUserById(id); }
 
-    @PostMapping
-    public UserResponse createReader(@RequestBody UserRequest request) {
-        return userService.createReader(request);
-    }
-
-    @PutMapping("/{id}")
-    public UserResponse updateUser(@PathVariable Long id, @RequestBody UserRequest request) {
-        return userService.updateUser(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteUser(@PathVariable Long id) {
-        userService.deleteUser(id);
+    @PutMapping("/{id}/borrowing-status")
+    public UserResponse updateBorrowingStatus(@PathVariable Long id, @Valid @RequestBody BorrowingStatusRequest request) {
+        return users.updateBorrowingStatus(id, request.enabled());
     }
 }

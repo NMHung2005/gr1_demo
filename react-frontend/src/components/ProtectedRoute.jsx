@@ -2,7 +2,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
 function ProtectedRoute({ children, roles }) {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, profileLoading, profileError, retryProfile } = useAuth();
   const location = useLocation();
 
   if (!isLoggedIn) {
@@ -19,6 +19,17 @@ function ProtectedRoute({ children, roles }) {
       </section>
     );
   }
+
+  if (profileError) {
+    return (
+      <section className="simple-form status-page">
+        <p className="error" role="alert">{profileError}</p>
+        <button type="button" onClick={retryProfile}>Thử lại</button>
+      </section>
+    );
+  }
+
+  if (profileLoading || !user?.id) return <p role="status">Đang tải hồ sơ…</p>;
 
   return children;
 }

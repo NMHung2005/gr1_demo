@@ -7,6 +7,7 @@ import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.dto.LoanRequest;
@@ -69,12 +70,6 @@ public class LoanService {
     }
 
     @Transactional
-    public List<LoanResponse> getLoansByUsername(String username) {
-        User user = findUserByUsername(username);
-        return getLoansByUser(user.getId());
-    }
-
-    @Transactional
     public List<LoanResponse> getOverdueLoans() {
         updateOverdueLoans();
         return loanRepository.findByStatus(LoanStatus.OVERDUE)
@@ -112,8 +107,12 @@ public class LoanService {
 
     @Transactional
     public LoanResponse borrow(LoanRequest request) {
-        Book book = findBookById(request.getBookId());
+        Book book = findBookByIdForUpdate(request.getBookId());
         User user = findUserById(request.getUserId());
+
+        if (user.getKeycloakId() == null || user.getRole() != com.example.demo.model.Role.READER) {
+            throw new IllegalArgumentException("Select a reader linked to Keycloak");
+        }
 
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("User is disabled");
@@ -144,15 +143,15 @@ public class LoanService {
     }
 
     @Transactional
-    public LoanResponse borrowForUsername(LoanRequest request, String username) {
-        User user = findUserByUsername(username);
-        LoanRequest readerRequest = new LoanRequest(request.getBookId(), user.getId(), request.getDueDate());
+    public LoanResponse borrowForUser(LoanRequest request, Long userId) {
+        LoanRequest readerRequest = new LoanRequest(request.getBookId(), userId, request.getDueDate());
         return borrow(readerRequest);
     }
 
     @Transactional
     public LoanResponse returnBook(Long loanId) {
-        Loan loan = findLoanById(loanId);
+        Loan loan = loanRepository.findByIdForUpdate(loanId)
+                .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
 
         if (loan.getStatus() == LoanStatus.RETURNED) {
             throw new IllegalArgumentException("Loan has already been returned");
@@ -163,7 +162,7 @@ public class LoanService {
         loan.setStatus(LoanStatus.RETURNED);
         loan.setFineAmount(calculateFine(returnDate, loan.getDueDate()));
 
-        Book book = loan.getBook();
+        Book book = findBookByIdForUpdate(loan.getBook().getId());
         book.setAvailable(book.getAvailable() + 1);
 
         Loan savedLoan = loanRepository.save(loan);
@@ -173,29 +172,30 @@ public class LoanService {
     }
 
     @Transactional
-    public LoanResponse returnBookForUsername(Long loanId, String username) {
-        Loan loan = findLoanById(loanId);
-        if (!loan.getUser().getUsername().equals(username)) {
-            throw new IllegalArgumentException("You can only return your own loans");
+    public LoanResponse returnBookForUser(Long loanId, Long userId) {
+        Loan loan = loanRepository.findByIdForUpdate(loanId)
+                .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
+        if (!loan.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You can only return your own loans");
         }
         return returnBook(loanId);
     }
 
     @Transactional
-    public LoanResponse getLoanByIdForUsername(Long loanId, String username) {
+    public LoanResponse getLoanByIdForUser(Long loanId, Long userId) {
         Loan loan = findLoanById(loanId);
-        if (!loan.getUser().getUsername().equals(username)) {
-            throw new IllegalArgumentException("You can only view your own loans");
+        if (!loan.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You can only view your own loans");
         }
         updateOverdueStatusIfNeeded(loan);
         return LoanResponse.fromLoan(loan);
     }
 
-    private Book findBookById(Long bookId) {
+    private Book findBookByIdForUpdate(Long bookId) {
         if (bookId == null) {
             throw new IllegalArgumentException("Book id is required");
         }
-        return bookRepository.findById(bookId)
+        return bookRepository.findByIdForUpdate(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
     }
 
@@ -207,19 +207,11 @@ public class LoanService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
     }
 
-    private User findUserByUsername(String username) {
-        if (username == null || username.trim().isEmpty()) {
-            throw new IllegalArgumentException("Username is required");
-        }
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-    }
-
     private Loan findLoanById(Long loanId) {
         if (loanId == null) {
             throw new IllegalArgumentException("Loan id is required");
         }
-        return loanRepository.findById(loanId)
+        return loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
     }
 
@@ -232,12 +224,8 @@ public class LoanService {
     }
 
     private void updateOverdueLoans() {
-        List<Loan> overdueLoans = loanRepository.findByDueDateBeforeAndStatusIn(
-                LocalDate.now(),
-                List.of(LoanStatus.BORROWED));
-
-        overdueLoans.forEach(loan -> loan.setStatus(LoanStatus.OVERDUE));
-        loanRepository.saveAll(overdueLoans);
+        // A conditional database update cannot overwrite a concurrently committed return.
+        loanRepository.markOverdue(LocalDate.now());
     }
 
     private void updateOverdueStatusIfNeeded(Loan loan) {

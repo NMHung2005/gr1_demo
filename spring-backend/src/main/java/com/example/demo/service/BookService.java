@@ -3,6 +3,7 @@ package com.example.demo.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.model.Book;
 import com.example.demo.model.LoanStatus;
@@ -33,8 +34,9 @@ public class BookService {
         return bookRepository.save(book);
     }
 
+    @Transactional
     public Book handleUpdateBook(long id, Book updated) {
-        Book existing = bookRepository.findById(id)
+        Book existing = bookRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
 
         validateQuantity(updated.getQuantity());
@@ -53,10 +55,10 @@ public class BookService {
         return bookRepository.save(existing);
     }
 
+    @Transactional
     public void handleDeleteBook(long id) {
-        if (!bookRepository.existsById(id)) {
-            throw new IllegalArgumentException("Book not found");
-        }
+        bookRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new IllegalArgumentException("Book not found"));
         if (loanRepository.existsByBook_IdAndStatusIn(id, ACTIVE_LOAN_STATUSES)) {
             throw new IllegalArgumentException("Cannot delete book with active loans");
         }

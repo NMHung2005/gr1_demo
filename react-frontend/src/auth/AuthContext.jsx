@@ -9,6 +9,7 @@ import {
 
 import keycloak from './keycloak';
 import { safeReturnPath } from './returnPath';
+import { apiClient } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -38,6 +39,35 @@ function readUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readUser);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(Boolean(user));
+  const [profileError, setProfileError] = useState('');
+  const [profileAttempt, setProfileAttempt] = useState(0);
+  const subject = user?.subject;
+
+  useEffect(() => {
+    if (!subject) {
+      setProfile(null);
+      setProfileLoading(false);
+      setProfileError('');
+      return;
+    }
+    let active = true;
+    setProfileLoading(true);
+    setProfileError('');
+    apiClient('/api/auth/me')
+      .then(data => {
+        if (!data?.id || data.subject !== subject) throw new Error('Invalid profile');
+        if (active) setProfile(data);
+      })
+      .catch(() => {
+        if (active) setProfileError('Không thể tải hồ sơ. Vui lòng thử lại.');
+      })
+      .finally(() => { if (active) setProfileLoading(false); });
+    return () => { active = false; };
+  }, [subject, profileAttempt]);
+
+  const retryProfile = useCallback(() => setProfileAttempt(value => value + 1), []);
 
   useEffect(() => {
     const syncUser = () => setUser(readUser());
@@ -85,16 +115,25 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
+  const libraryUser = useMemo(() => user ? {
+    ...user,
+    id: profile?.subject === user.subject ? profile.id : undefined,
+    enabled: profile?.subject === user.subject ? profile.enabled : true
+  } : null, [user, profile]);
+
   const value = useMemo(() => ({
-    auth: user,
-    user,
+    auth: libraryUser,
+    user: libraryUser,
     isLoggedIn: Boolean(user),
     isLibrarian: Boolean(user?.roles.includes('LIBRARIAN')),
-    isReader: Boolean(user?.roles.includes('READER')),
+    isReader: user?.role === 'READER',
     login,
     register,
-    logout
-  }), [user, login, register, logout]);
+    logout,
+    profileLoading,
+    profileError,
+    retryProfile
+  }), [user, libraryUser, login, register, logout, profileLoading, profileError, retryProfile]);
 
   return (
     <AuthContext.Provider value={value}>

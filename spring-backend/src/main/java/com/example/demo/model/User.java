@@ -10,17 +10,19 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "users")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String username;
 
-    @Column(nullable = false)
-    private String password;
+    // Nullable only for legacy profiles that have not been explicitly linked yet.
+    @Column(name = "keycloak_id", unique = true, length = 255)
+    private String keycloakId;
 
     @Column(name = "full_name", nullable = false)
     private String fullName;
@@ -37,9 +39,9 @@ public class User {
     protected User() {
     }
 
-    public User(String username, String password, String fullName, String email, Role role) {
+    public User(String keycloakId, String username, String fullName, String email, Role role) {
+        this.keycloakId = keycloakId;
         this.username = username;
-        this.password = password;
         this.fullName = fullName;
         this.email = email;
         this.role = role;
@@ -58,12 +60,12 @@ public class User {
         this.username = username;
     }
 
-    public String getPassword() {
-        return password;
+    public String getKeycloakId() {
+        return keycloakId;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    public void setKeycloakId(String keycloakId) {
+        this.keycloakId = keycloakId;
     }
 
     public String getFullName() {

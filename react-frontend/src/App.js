@@ -8,21 +8,13 @@ import BookPage from './pages/BookPage';
 import LoginPage from './pages/LoginPage';
 import ReaderPage from './pages/ReaderPage';
 import RegisterPage from './pages/RegisterPage';
+import DashboardPage from './pages/DashboardPage';
+import LoanPage from './pages/LoanPage';
+import MyLoansPage from './pages/MyLoansPage';
 
 function HomeRoute() {
   const { isLoggedIn } = useAuth();
   return <Navigate to={isLoggedIn ? '/books' : '/login'} replace />;
-}
-
-function UpdatingPage({ title }) {
-  return (
-    <section className="simple-form status-page">
-      <span className="section-label">LIBRARY APP</span>
-      <h1>{title}</h1>
-      <p>Tính năng này đang được cập nhật. Bạn vẫn có thể tra cứu sách trong thư viện.</p>
-      <Link className="button-link" to="/books">Xem danh mục sách</Link>
-    </section>
-  );
 }
 
 function NotFoundPage() {
@@ -47,19 +39,19 @@ function App() {
               <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
               <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
               <Route path="/books" element={
-                <ProtectedRoute roles={['READER', 'LIBRARIAN']}><BookPage readOnly /></ProtectedRoute>
+                <ProtectedRoute roles={['READER', 'LIBRARIAN']}><BookPage /></ProtectedRoute>
               } />
               <Route path="/readers" element={
-                <ProtectedRoute roles={['LIBRARIAN']}><ReaderPage readOnly /></ProtectedRoute>
+                <ProtectedRoute roles={['LIBRARIAN']}><ReaderPage /></ProtectedRoute>
               } />
               <Route path="/dashboard" element={
-                <ProtectedRoute roles={['LIBRARIAN']}><UpdatingPage title="Tổng quan thư viện" /></ProtectedRoute>
+                <ProtectedRoute roles={['LIBRARIAN']}><DashboardPage /></ProtectedRoute>
               } />
               <Route path="/loans" element={
-                <ProtectedRoute roles={['LIBRARIAN']}><UpdatingPage title="Quản lý mượn trả" /></ProtectedRoute>
+                <ProtectedRoute roles={['LIBRARIAN']}><LoanPage /></ProtectedRoute>
               } />
               <Route path="/my-loans" element={
-                <ProtectedRoute roles={['READER']}><UpdatingPage title="Phiếu mượn của tôi" /></ProtectedRoute>
+                <ProtectedRoute roles={['READER']}><MyLoansPage /></ProtectedRoute>
               } />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

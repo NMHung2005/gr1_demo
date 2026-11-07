@@ -16,14 +16,17 @@ import com.example.demo.dto.LoanRequest;
 import com.example.demo.dto.LoanResponse;
 import com.example.demo.dto.LoanStatsResponse;
 import com.example.demo.service.LoanService;
+import com.example.demo.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/loans")
 public class LoanController {
     private final LoanService loanService;
+    private final CurrentUserService currentUser;
 
-    public LoanController(LoanService loanService) {
+    public LoanController(LoanService loanService, CurrentUserService currentUser) {
         this.loanService = loanService;
+        this.currentUser = currentUser;
     }
 
     @GetMapping
@@ -31,12 +34,12 @@ public class LoanController {
         if (isLibrarian(authentication)) {
             return loanService.getAllLoans();
         }
-        return loanService.getLoansByUsername(authentication.getName());
+        return loanService.getLoansByUser(currentUser.resolve(authentication).getId());
     }
 
     @GetMapping("/me")
     public List<LoanResponse> getMyLoans(Authentication authentication) {
-        return loanService.getLoansByUsername(authentication.getName());
+        return loanService.getLoansByUser(currentUser.resolve(authentication).getId());
     }
 
     @GetMapping("/overdue")
@@ -56,7 +59,7 @@ public class LoanController {
         if (isLibrarian(authentication)) {
             return loanService.getLoanById(id);
         }
-        return loanService.getLoanByIdForUsername(id, authentication.getName());
+        return loanService.getLoanByIdForUser(id, currentUser.resolve(authentication).getId());
     }
 
     @PostMapping
@@ -64,7 +67,7 @@ public class LoanController {
         if (isLibrarian(authentication)) {
             return loanService.borrow(request);
         }
-        return loanService.borrowForUsername(request, authentication.getName());
+        return loanService.borrowForUser(request, currentUser.resolve(authentication).getId());
     }
 
     @PutMapping("/{id}/return")
@@ -72,7 +75,7 @@ public class LoanController {
         if (isLibrarian(authentication)) {
             return loanService.returnBook(id);
         }
-        return loanService.returnBookForUsername(id, authentication.getName());
+        return loanService.returnBookForUser(id, currentUser.resolve(authentication).getId());
     }
 
     private boolean isLibrarian(Authentication authentication) {

@@ -12,8 +12,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -30,11 +28,17 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/auth/me")
-                        .authenticated()
+                        .hasAnyRole("READER", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/api/books", "/api/books/**")
                         .hasAnyRole("READER", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/**")
                         .hasRole("LIBRARIAN")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/*/borrowing-status").hasRole("LIBRARIAN")
+                        .requestMatchers(HttpMethod.POST, "/api/books", "/api/books/**").hasRole("LIBRARIAN")
+                        .requestMatchers(HttpMethod.PUT, "/api/books/**").hasRole("LIBRARIAN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/books/**").hasRole("LIBRARIAN")
+                        .requestMatchers("/api/loans/stats", "/api/loans/overdue").hasRole("LIBRARIAN")
+                        .requestMatchers("/api/loans", "/api/loans/**").hasAnyRole("READER", "LIBRARIAN")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt
@@ -71,8 +75,4 @@ public class SecurityConfig {
         return converter;
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
 }

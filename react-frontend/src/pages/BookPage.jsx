@@ -5,7 +5,7 @@ import EmptyState from '../components/EmptyState';
 import { filterBooks } from '../utils/bookFilters';
 
 function BookPage({ readOnly = false }) {
-  const { isLibrarian, isReader } = useAuth();
+  const { isLibrarian, isReader, user } = useAuth();
   const showActions = !readOnly && (isLibrarian || isReader);
   const [books, setBooks] = useState([]);
   const [error, setError] = useState('');
@@ -224,9 +224,9 @@ function BookPage({ readOnly = false }) {
                         className={(book.available ?? 0) > 0 ? 'link' : 'link unavailable'}
                         type="button"
                         onClick={() => handleBorrow(book)}
-                        disabled={(book.available ?? 0) <= 0}
+                        disabled={user?.enabled === false || (book.available ?? 0) <= 0}
                       >
-                        {(book.available ?? 0) > 0 ? 'Borrow' : 'Out of stock'}
+                        {user?.enabled === false ? 'Tạm dừng mượn' : (book.available ?? 0) > 0 ? 'Borrow' : 'Out of stock'}
                       </button>
                     ) : null}
                     {isLibrarian ? (

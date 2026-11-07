@@ -10,6 +10,7 @@ public class UserResponse {
     private String email;
     private Role role;
     private boolean enabled;
+    private String keycloakId;
 
     public UserResponse() {
     }
@@ -24,13 +25,19 @@ public class UserResponse {
     }
 
     public static UserResponse fromUser(User user) {
-        return new UserResponse(
+        UserResponse response = new UserResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole(),
                 user.isEnabled());
+        response.keycloakId = user.getKeycloakId();
+        return response;
+    }
+
+    public String getKeycloakId() {
+        return keycloakId;
     }
 
     public Long getId() {
