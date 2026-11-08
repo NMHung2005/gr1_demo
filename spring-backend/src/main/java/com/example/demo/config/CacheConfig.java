@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Map;
 
 import com.example.demo.dto.BookResponse;
+import com.example.demo.dto.LoanStatsResponse;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -24,16 +26,25 @@ import tools.jackson.databind.json.JsonMapper;
 @Profile("!test")
 public class CacheConfig {
 
-    private static final Duration BOOK_TTL = Duration.ofSeconds(30);
+    @Value("${app.cache.books-ttl:30s}")
+    private Duration booksTtl = Duration.ofSeconds(30);
+
+    @Value("${app.cache.statistics-ttl:15s}")
+    private Duration statisticsTtl = Duration.ofSeconds(15);
+
+    @Value("${app.cache.key-prefix:library:v2:}")
+    private String keyPrefix = "library:v2:";
 
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory) {
 
+        if (booksTtl.isZero() || booksTtl.isNegative() || statisticsTtl.isZero() || statisticsTtl.isNegative()) {
+            throw new IllegalArgumentException("Cache TTLs must be positive");
+        }
         RedisCacheConfiguration configuration = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(BOOK_TTL)
-                // v2 uses typed JSON; do not try to read v1 JDK-serialized values.
-                .prefixCacheNameWith("library:v2:")
+                .entryTtl(booksTtl)
+                .prefixCacheNameWith(keyPrefix)
                 .disableCachingNullValues();
 
         JsonMapper mapper = JsonMapper.builder().build();
@@ -42,15 +53,17 @@ public class CacheConfig {
         var serializer = new JacksonJsonRedisSerializer<List<BookResponse>>(mapper, bookListType);
         RedisCacheConfiguration bookConfiguration = configuration
                 .serializeValuesWith(SerializationPair.fromSerializer(serializer));
+        var statisticsSerializer = new JacksonJsonRedisSerializer<LoanStatsResponse>(mapper, LoanStatsResponse.class);
+        RedisCacheConfiguration statisticsConfiguration = configuration.entryTtl(statisticsTtl)
+                .serializeValuesWith(SerializationPair.fromSerializer(statisticsSerializer));
+        Map<String, Duration> ttlByCache = Map.of("books", booksTtl, "loanStats", statisticsTtl);
 
         var manager = new RedisCacheManager(
-                RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory),
-                configuration, Map.of("books", bookConfiguration)) {
+                RedisCacheWriter.create(connectionFactory, writer -> writer.immediateWrites(true)),
+                configuration, false, Map.of("books", bookConfiguration, "loanStats", statisticsConfiguration)) {
             @Override
             protected Cache decorateCache(Cache cache) {
-                // Order matters: afterCommit must call the fail-open wrapper too.
-                Cache optional = cache.getName().equals("books")
-                        ? new FailOpenCache(cache, BOOK_TTL) : cache;
+                Cache optional = new FailOpenCache(cache, ttlByCache.get(cache.getName()));
                 return super.decorateCache(optional);
             }
         };

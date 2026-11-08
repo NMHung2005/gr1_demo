@@ -6,7 +6,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.demo.dto.LoanRequest;
 import com.example.demo.dto.LoanResponse;
 import com.example.demo.dto.LoanStatsResponse;
-import com.example.demo.dto.TopBorrowedBookResponse;
 import com.example.demo.model.Book;
 import com.example.demo.model.Loan;
 import com.example.demo.model.LoanStatus;
@@ -34,14 +33,20 @@ public class LoanService {
     private final LoanRepository loanRepository;
     private final BookRepository bookRepository;
     private final UserRepository userRepository;
+    private final LoanStatisticsService statistics;
+    private final OverdueLoanService overdueLoans;
 
     public LoanService(
             LoanRepository loanRepository,
             BookRepository bookRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            LoanStatisticsService statistics,
+            OverdueLoanService overdueLoans) {
         this.loanRepository = loanRepository;
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
+        this.statistics = statistics;
+        this.overdueLoans = overdueLoans;
     }
 
     @Transactional
@@ -79,35 +84,18 @@ public class LoanService {
                 .toList();
     }
 
-    @Transactional
     public LoanStatsResponse getStats() {
-        updateOverdueLoans();
-
-        long borrowedLoans = loanRepository.countByStatus(LoanStatus.BORROWED);
-        long overdueLoans = loanRepository.countByStatus(LoanStatus.OVERDUE);
-        long returnedLoans = loanRepository.countByStatus(LoanStatus.RETURNED);
-        long activeLoans = borrowedLoans + overdueLoans;
-
-        List<TopBorrowedBookResponse> topBorrowedBooks = loanRepository.findTopBorrowedBooks(PageRequest.of(0, 5))
-                .stream()
-                .map(row -> new TopBorrowedBookResponse(
-                        (Long) row[0],
-                        (String) row[1],
-                        (Long) row[2]))
-                .toList();
-
-        return new LoanStatsResponse(
-                loanRepository.count(),
-                activeLoans,
-                borrowedLoans,
-                overdueLoans,
-                returnedLoans,
-                loanRepository.sumFineAmount(),
-                topBorrowedBooks);
+        LocalDate today = LocalDate.now();
+        // A separate transaction commits overdue changes/eviction before the cached read.
+        overdueLoans.refresh(today);
+        return statistics.getStats(today);
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "books", key = "'all'")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "books", key = "'all'"),
+            @CacheEvict(cacheNames = "loanStats", allEntries = true)
+    })
     public LoanResponse borrow(LoanRequest request) {
         Book book = findBookByIdForUpdate(request.getBookId());
         User user = findUserById(request.getUserId());
@@ -145,14 +133,20 @@ public class LoanService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "books", key = "'all'")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "books", key = "'all'"),
+            @CacheEvict(cacheNames = "loanStats", allEntries = true)
+    })
     public LoanResponse borrowForUser(LoanRequest request, Long userId) {
         LoanRequest readerRequest = new LoanRequest(request.getBookId(), userId, request.getDueDate());
         return borrow(readerRequest);
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "books", key = "'all'")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "books", key = "'all'"),
+            @CacheEvict(cacheNames = "loanStats", allEntries = true)
+    })
     public LoanResponse returnBook(Long loanId) {
         Loan loan = loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
@@ -176,7 +170,10 @@ public class LoanService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "books", key = "'all'")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "books", key = "'all'"),
+            @CacheEvict(cacheNames = "loanStats", allEntries = true)
+    })
     public LoanResponse returnBookForUser(Long loanId, Long userId) {
         Loan loan = loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
@@ -231,13 +228,10 @@ public class LoanService {
     private void updateOverdueLoans() {
         // A conditional database update cannot overwrite a concurrently committed
         // return.
-        loanRepository.markOverdue(LocalDate.now());
+        overdueLoans.refresh(LocalDate.now());
     }
 
     private void updateOverdueStatusIfNeeded(Loan loan) {
-        if (loan.getStatus() == LoanStatus.BORROWED && loan.getDueDate().isBefore(LocalDate.now())) {
-            loan.setStatus(LoanStatus.OVERDUE);
-            loanRepository.save(loan);
-        }
+        overdueLoans.refreshOne(loan, LocalDate.now());
     }
 }
