@@ -8,6 +8,7 @@ import java.util.List;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,7 @@ import com.example.demo.dto.LoanStatsResponse;
 import com.example.demo.model.Book;
 import com.example.demo.model.Loan;
 import com.example.demo.model.LoanStatus;
+import com.example.demo.messaging.LoanEvent;
 import com.example.demo.model.User;
 import com.example.demo.repository.BookRepository;
 import com.example.demo.repository.LoanRepository;
@@ -35,18 +37,21 @@ public class LoanService {
     private final UserRepository userRepository;
     private final LoanStatisticsService statistics;
     private final OverdueLoanService overdueLoans;
+    private final ApplicationEventPublisher events;
 
     public LoanService(
             LoanRepository loanRepository,
             BookRepository bookRepository,
             UserRepository userRepository,
             LoanStatisticsService statistics,
-            OverdueLoanService overdueLoans) {
+            OverdueLoanService overdueLoans,
+            ApplicationEventPublisher events) {
         this.loanRepository = loanRepository;
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
         this.statistics = statistics;
         this.overdueLoans = overdueLoans;
+        this.events = events;
     }
 
     @Transactional
@@ -129,6 +134,8 @@ public class LoanService {
         Loan savedLoan = loanRepository.save(loan);
         bookRepository.save(book);
 
+        events.publishEvent(LoanEvent.from(savedLoan, LoanEvent.Type.LOAN_BORROWED));
+
         return LoanResponse.fromLoan(savedLoan);
     }
 
@@ -165,6 +172,8 @@ public class LoanService {
 
         Loan savedLoan = loanRepository.save(loan);
         bookRepository.save(book);
+
+        events.publishEvent(LoanEvent.from(savedLoan, LoanEvent.Type.LOAN_RETURNED));
 
         return LoanResponse.fromLoan(savedLoan);
     }
